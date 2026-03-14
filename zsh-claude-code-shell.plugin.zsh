@@ -106,7 +106,7 @@ _zsh_claude_sanitize() {
     input="${input#"${input%%[![:space:]]*}"}"
     input="${input%"${input##*[![:space:]]}"}"
 
-    echo "$input"
+    printf '%s\n' "$input"
 }
 
 # preexec hook — fires just before a command executes
