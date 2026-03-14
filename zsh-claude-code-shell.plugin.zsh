@@ -201,7 +201,7 @@ _zsh_claude_accept_line() {
 
     # Build claude command with full tool access for local context
     local claude_args=("-p" "--output-format" "text")
-    claude_args+=("--system-prompt" "You are a shell command generator. Your ONLY job is to output a single shell command that accomplishes the user's request. You can read local files, list directories, and search the web to understand context before answering. Output ONLY the raw shell command - no markdown, no code blocks, no explanations, no comments, no backticks. Just the executable command itself on a single line.")
+    claude_args+=("--system-prompt" "You are a shell command generator. Your ONLY job is to output a shell command that accomplishes the user's request. Pipelines, && chains, and subshells are all fine. You can read local files, list directories, and search the web to understand context before answering. Output ONLY the raw command - no markdown, no code blocks, no explanations, no comments, no backticks. Just the executable command itself on a single line.")
 
     if [[ -n "$ZSH_CLAUDE_SHELL_MODEL" ]]; then
         claude_args+=("--model" "$ZSH_CLAUDE_SHELL_MODEL")
