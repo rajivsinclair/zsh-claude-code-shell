@@ -152,7 +152,7 @@ _zsh_claude_accept_line() {
     fi
 
     # Pass through if buffer doesn't start with "# "
-    if [[ ! "$BUFFER" =~ ^'# ' ]]; then
+    if [[ "$BUFFER" != "# "* ]]; then
         zle .accept-line
         return
     fi
@@ -179,10 +179,15 @@ _zsh_claude_accept_line() {
     fi
 
     # Inject error context for troubleshooting queries (? or why/fix/explain/etc.)
-    if [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]] && [[ "$query" =~ ^(\?|why|fix|explain|what happened|debug|help) ]]; then
-        query="The following shell command failed with exit code $_ZSH_CLAUDE_FAILED_EXIT: \`$_ZSH_CLAUDE_FAILED_CMD\`. ${query#\? }"
-        _ZSH_CLAUDE_FAILED_CMD=""
-        _ZSH_CLAUDE_FAILED_EXIT=0
+    if [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]]; then
+        local _first_word="${query%% *}"
+        case "$_first_word" in
+            \?|why|fix|explain|debug|help|"what")
+                query="The following shell command failed with exit code $_ZSH_CLAUDE_FAILED_EXIT: \`$_ZSH_CLAUDE_FAILED_CMD\`. ${query#\? }"
+                _ZSH_CLAUDE_FAILED_CMD=""
+                _ZSH_CLAUDE_FAILED_EXIT=0
+                ;;
+        esac
     fi
 
     # Start spinner or show simple message
