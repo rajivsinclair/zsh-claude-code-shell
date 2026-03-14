@@ -147,7 +147,7 @@ _zsh_claude_accept_line() {
     fi
 
     # Normalize "? " prefix to "# " so both work as triggers
-    if [[ "$BUFFER" =~ ^'? ' ]] || ( [[ "$BUFFER" == "?" ]] && [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]] ); then
+    if [[ "$BUFFER" == "? "* ]] || ( [[ "$BUFFER" == "?" ]] && [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]] ); then
         BUFFER="# ${BUFFER:2}"
     fi
 
