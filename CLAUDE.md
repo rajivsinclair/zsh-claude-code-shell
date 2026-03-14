@@ -76,6 +76,6 @@ All use `: ${VAR:=default}` pattern — only set if unset/empty, so exports in .
 ## When Modifying
 
 - If adding new trigger prefixes, add normalization next to the `? ` check (line ~149)
-- If changing the error context injection, the trigger words are in a regex at line ~182
+- If changing the error context injection, the trigger words are in a `case` statement at line ~184
 - The `_zsh_claude_sanitize` function handles Claude's tendency to wrap output in markdown — if Claude's output format changes, this is where to fix it
 - The spinner cleanup (`_zsh_claude_stop_spinner`) uses ANSI escape sequences to clear lines — if the spinner looks broken in certain terminals, start here
