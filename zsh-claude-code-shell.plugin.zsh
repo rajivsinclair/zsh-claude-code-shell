@@ -6,6 +6,13 @@
 : ${ZSH_CLAUDE_SHELL_MODEL:=}
 : ${ZSH_CLAUDE_SHELL_DEBUG:=0}
 : ${ZSH_CLAUDE_SHELL_FANCY_LOADING:=1}  # Set to 0 to use simple loading message
+: ${ZSH_CLAUDE_SHELL_ERROR_HINT:=1}     # Set to 0 to disable error feedback hints
+
+# Error tracking state
+_ZSH_CLAUDE_LAST_GENERATED=""   # command the plugin just placed in the buffer
+_ZSH_CLAUDE_WATCHING=0          # 1 = the currently executing command was plugin-generated
+_ZSH_CLAUDE_FAILED_CMD=""       # last failed plugin-generated command (for context injection)
+_ZSH_CLAUDE_FAILED_EXIT=0       # its exit code
 
 # Thinking verbs (from Claude Code)
 _ZSH_CLAUDE_THINKING_VERBS=(
@@ -102,12 +109,46 @@ _zsh_claude_sanitize() {
     echo "$input"
 }
 
+# preexec hook — fires just before a command executes
+_zsh_claude_preexec() {
+    if [[ -n "$_ZSH_CLAUDE_LAST_GENERATED" ]] && [[ "$1" == "$_ZSH_CLAUDE_LAST_GENERATED" ]]; then
+        _ZSH_CLAUDE_WATCHING=1
+    else
+        _ZSH_CLAUDE_WATCHING=0
+    fi
+    _ZSH_CLAUDE_LAST_GENERATED=""
+}
+
+# precmd hook — fires after a command completes, before prompt
+_zsh_claude_precmd() {
+    local last_exit=$?
+    if [[ "$_ZSH_CLAUDE_WATCHING" == "1" ]] && [[ $last_exit -ne 0 ]]; then
+        _ZSH_CLAUDE_FAILED_CMD="$_ZSH_CLAUDE_PREEXEC_CMD"
+        _ZSH_CLAUDE_FAILED_EXIT=$last_exit
+        if [[ "$ZSH_CLAUDE_SHELL_ERROR_HINT" == "1" ]]; then
+            print -P "%F{yellow}💡 Command failed (exit $last_exit). Type %F{cyan}?%F{yellow} to troubleshoot%f"
+        fi
+    fi
+    _ZSH_CLAUDE_WATCHING=0
+}
+
+# Enriched preexec that also saves the command text for precmd
+_zsh_claude_preexec_wrapper() {
+    _ZSH_CLAUDE_PREEXEC_CMD="$1"
+    _zsh_claude_preexec "$1"
+}
+
 # Main widget that intercepts Enter key
 _zsh_claude_accept_line() {
     # Pass through if disabled
     if [[ "$ZSH_CLAUDE_SHELL_DISABLED" == "1" ]]; then
         zle .accept-line
         return
+    fi
+
+    # Normalize "? " prefix to "# " so both work as triggers
+    if [[ "$BUFFER" =~ ^'? ' ]] || ( [[ "$BUFFER" == "?" ]] && [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]] ); then
+        BUFFER="# ${BUFFER:2}"
     fi
 
     # Pass through if buffer doesn't start with "# "
@@ -137,6 +178,13 @@ _zsh_claude_accept_line() {
         return 1
     fi
 
+    # Inject error context for troubleshooting queries (? or why/fix/explain/etc.)
+    if [[ -n "$_ZSH_CLAUDE_FAILED_CMD" ]] && [[ "$query" =~ ^(\?|why|fix|explain|what happened|debug|help) ]]; then
+        query="The following shell command failed with exit code $_ZSH_CLAUDE_FAILED_EXIT: \`$_ZSH_CLAUDE_FAILED_CMD\`. ${query#\? }"
+        _ZSH_CLAUDE_FAILED_CMD=""
+        _ZSH_CLAUDE_FAILED_EXIT=0
+    fi
+
     # Start spinner or show simple message
     local spinner_pid=""
     if [[ "$ZSH_CLAUDE_SHELL_FANCY_LOADING" == "1" ]]; then
@@ -151,10 +199,9 @@ _zsh_claude_accept_line() {
         zle -R "Generating command with Claude..."
     fi
 
-    # Build claude command - restrict tools and use focused system prompt
+    # Build claude command with full tool access for local context
     local claude_args=("-p" "--output-format" "text")
-    claude_args+=("--tools" "WebSearch,WebFetch")
-    claude_args+=("--system-prompt" "You are a shell command generator. Your ONLY job is to output a single shell command that accomplishes the user's request. Output ONLY the raw shell command - no markdown, no code blocks, no explanations, no comments, no backticks. Just the executable command itself on a single line. If you need to look up command syntax, you may use web search.")
+    claude_args+=("--system-prompt" "You are a shell command generator. Your ONLY job is to output a single shell command that accomplishes the user's request. You can read local files, list directories, and search the web to understand context before answering. Output ONLY the raw shell command - no markdown, no code blocks, no explanations, no comments, no backticks. Just the executable command itself on a single line.")
 
     if [[ -n "$ZSH_CLAUDE_SHELL_MODEL" ]]; then
         claude_args+=("--model" "$ZSH_CLAUDE_SHELL_MODEL")
@@ -211,9 +258,10 @@ _zsh_claude_accept_line() {
     # Sanitize the output
     cmd=$(_zsh_claude_sanitize "$cmd")
 
-    # Replace buffer with generated command
+    # Replace buffer with generated command and track it for error detection
     BUFFER="$cmd"
     CURSOR=${#BUFFER}
+    _ZSH_CLAUDE_LAST_GENERATED="$cmd"
 
     zle reset-prompt
 }
@@ -221,6 +269,11 @@ _zsh_claude_accept_line() {
 # Initialize the plugin
 _zsh_claude_init() {
     zle -N accept-line _zsh_claude_accept_line
+
+    # Register preexec/precmd hooks (additive — won't clobber other hooks)
+    autoload -Uz add-zsh-hook
+    add-zsh-hook preexec _zsh_claude_preexec_wrapper
+    add-zsh-hook precmd _zsh_claude_precmd
 }
 
 _zsh_claude_init
